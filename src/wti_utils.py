@@ -89,21 +89,48 @@ def add_trend_features(df):
     return df
 
 
+# def add_microstructure(df):
+#     # candle body size
+#     df["body"] = (df["close"] - df["open"]) / df["close"]
+    
+#     # wick structure
+#     df["upper_wick"] = (df["high"] - df[["open", "close"]].max(axis=1)) / df["close"]
+#     df["lower_wick"] = (df[["open", "close"]].min(axis=1) - df["low"]) / df["close"]
+    
+#     # volatility clustering
+#     df["abs_ret"] = df["ret_1"].abs()
+#     df["vol_cluster"] = df["abs_ret"].shift(1).rolling(10).mean()
+    
+#     # jump proxy
+#     df["vol_5"] = df["ret_1"].shift(1).rolling(5).std()
+#     # df["jump"] = (df["ret_1"].abs() > 3 * df["vol_5"].shift(1)).astype(int)
+#     ret = df["ret_1"].shift(1)
+#     vol = df["vol_5"].shift(1)
+
+#     df["jump"] = (ret.abs() > 3 * vol).astype(int)
+    
+#     return df
+
+
 def add_microstructure(df):
-    # candle body size
+    # candle body size (OK)
     df["body"] = (df["close"] - df["open"]) / df["close"]
     
-    # wick structure
+    # wick structure (OK ohne shift)
     df["upper_wick"] = (df["high"] - df[["open", "close"]].max(axis=1)) / df["close"]
     df["lower_wick"] = (df[["open", "close"]].min(axis=1) - df["low"]) / df["close"]
     
-    # volatility clustering
+    # volatility clustering (clean causal)
     df["abs_ret"] = df["ret_1"].abs()
     df["vol_cluster"] = df["abs_ret"].rolling(10).mean()
     
-    # jump proxy
+    # jump proxy (clean version)
     df["vol_5"] = df["ret_1"].rolling(5).std()
-    df["jump"] = (df["ret_1"].abs() > 3 * df["vol_5"]).astype(int)
+    
+    df["jump"] = (
+        df["ret_1"].abs() >
+        3 * df["vol_5"]
+    ).astype(int)
     
     return df
 
@@ -135,7 +162,13 @@ def add_time_features(df):
 
 def add_regime_features(df):
     # rolling volatility regime (no future info)
-    df["vol_rank"] = df["vol_close_60"].shift(1).rolling(500).rank(pct=True)
+    # df["vol_rank"] = df["vol_close_60"].shift(1).rolling(500).rank(pct=True)
+    df["vol_rank"] = (
+        df["vol_close_60"]
+        .shift(1)
+        .rolling(500)
+        .apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1])
+    )
 
     df["vol_regime"] = (df["vol_rank"] > 0.66).astype(int)
 
@@ -157,13 +190,13 @@ def build_wti_ohlc_features(df):
     return df
 
 
-def create_labels(df, horizons=[1,5,15,30,60,240,720,1440]):
+def create_labels(df, horizons=[2,5,15,30,60,240,720,1440]):
     
     for h in horizons:
         future_ret = np.log(df["close"].shift(-h)) - np.log(df["close"])
         
         # volatility adjusted threshold
-        vol = df["ret_1"].shift(1).rolling(1440).std()
+        vol = df["ret_1"].rolling(1440).std()
         thr = 0.5 * vol
         
         df[f"y_up_{h}"] = (future_ret > thr).astype(int)
