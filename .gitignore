@@ -11,6 +11,7 @@ __pycache__/
 
 # data files
 00_data/
+results/
 
 
 # OS
